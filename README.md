@@ -25,6 +25,7 @@ To run the neural network weight optimization, run nn.py from the command line. 
 The program will run and save the appropriate figures and graphs to a 'figures' subdirectory. It will also print a few benchmarking metrics. Dataset preprocessing is handled automatically. 
 
 Requirements include: 
+
         pandas
         numpy
         scikit-learn
