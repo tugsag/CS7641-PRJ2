@@ -2,6 +2,7 @@ import numpy as np
 import pandas as pd
 import mlrose_hiive as ml
 import matplotlib.pyplot as plt
+import time
 from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
 from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, classification_report
 
@@ -42,11 +43,13 @@ def nn_rhc(train_x, train_y, test_x, test_y):
     accuracies_test = []
     auc_test = []
     pred = None
+    times = []
     # params = []
     for ind, i in enumerate(restarts):
         # set_accuracy = []
         # set_auc = []
         # set_loss = []
+        start = time.time()
         print(ind/len(restarts), ' progress')
         # for ind, j in enumerate(learning_rates):
             # print(j)
@@ -68,6 +71,7 @@ def nn_rhc(train_x, train_y, test_x, test_y):
         auc_test.append(auc)
         if max(auc_test) == auc:
             pred = pred_y
+        times.append(time.time() - start)
         # loss.append(set_loss)
         # accuracies_test.append(set_accuracy)
         # auc_test.append(set_auc)
@@ -90,6 +94,8 @@ def nn_rhc(train_x, train_y, test_x, test_y):
     # plot(params, accuracies_train, 'Accuracy vs Restarts', 'Restarts', 'Accuracy', ticks=range(len(params)), labels=params, test=accuracies_test)
     # plot(params, auc_train, 'AUC vs Restarts', 'Restarts', 'AUC Score', ticks=range(len(params)), labels=params, test=auc_test)
     plot(range(len(best_curve)), best_curve, 'Best Curve - NN RHC', 'Iterations', 'Fitness', path='nn_rhc_best_curve.png')
+    print('times for reach restart: ', list(zip(restarts, times)))
+    print('total time for all: ', sum(times))
     print('best clasification: ')
     print(classification_report(test_y, pred))
 
@@ -104,11 +110,13 @@ def nn_sa(train_x, train_y, test_x, test_y):
     accuracies_test = []
     auc_test = []
     pred = None
+    times = []
     for ind, i in enumerate(temps):
         print(ind/len(temps), ' progress')
         for j in learning_rates:
+            start = time.time()
             schedule = ml.ExpDecay(init_temp=i)
-            model = ml.NeuralNetwork(hidden_nodes=[10, 10], activation='relu', algorithm='simulated_annealing', max_iters=1000, bias=True, is_classifier=True,
+            model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='simulated_annealing', max_iters=1000, bias=True, is_classifier=True,
                             learning_rate=j, early_stopping=False, schedule=schedule, max_attempts=100, random_state=SEED, curve=True)
             model.fit(train_x, train_y)
             loss.append(model.loss)
@@ -125,6 +133,7 @@ def nn_sa(train_x, train_y, test_x, test_y):
             auc_test.append(auc)
             if max(auc_test) == auc:
                 pred = pred_y
+            times.append(time.time() - start)
 
     accuracies_test = np.asarray(split_arr(accuracies_test, 4))
     auc_test = np.asarray(split_arr(auc_test, 4))
@@ -137,7 +146,6 @@ def nn_sa(train_x, train_y, test_x, test_y):
     auc_test = auc_test[index]
     accuracies_train = accuracies_train[index]
     auc_train = auc_train[index]
-
     # curves = np.array(split_arr(curves, 4))
     # index = np.argmax(curves.mean(axis=1))
     # best_curve = curves[index]
@@ -150,6 +158,8 @@ def nn_sa(train_x, train_y, test_x, test_y):
     plot(temps, accuracies_train, 'Accuracy vs temps', 'Temps', 'Accuracy', test=accuracies_test, path='nn_sa_accuracy.png')
     plot(temps, auc_train, 'AUC vs Temps', 'Temps', 'AUC Score', test=auc_test, path='nn_sa_auc.png')
     # plot(range(len(best_curve)), best_curve, 'Best Curve - NN RHC', 'Iterations', 'Fitness', path='nn_sa_best_curve.png')
+    print('time for best learning rate: ', list(zip(temps, times[0:4])))
+    print('total experiment time: ', sum(times))
     print('best classification: ')
     print(classification_report(test_y, pred))
 
@@ -165,10 +175,11 @@ def nn_ga(train_x, train_y, test_x, test_y):
     auc_test = []
     params = []
     pred = None
+    times = []
     for ind, i in enumerate(pop_size):
         print(ind/len(pop_size), ' progress')
         for j in mutation_prob:
-            print(j)
+            start = time.time()
             model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='genetic_alg', max_iters=1000, bias=True, is_classifier=True,
                             learning_rate=0.1, early_stopping=False, pop_size=i, mutation_prob=j, max_attempts=100, random_state=SEED, curve=True)
             model.fit(train_x, train_y)
@@ -187,6 +198,7 @@ def nn_ga(train_x, train_y, test_x, test_y):
             auc_test.append(auc)
             if max(auc_test) == auc:
                 pred = pred_y
+            times.append(time.time() - start)
 
     curves = np.array(curves)
     index = np.argmax(curves.mean(axis=1))
@@ -198,6 +210,8 @@ def nn_ga(train_x, train_y, test_x, test_y):
     plot(params, loss, 'Pop Size & Mutation Prob vs Loss', 'Pop Size & Mutation Prob', 'Loss', ticks=range(len(params)), labels=params, path='nn_ga_loss.png')
     plot(params, accuracies_train, 'Pop Size & Mutation Prob vs Accuracy', 'Pop Size & Mutation Prob', 'Accuracy', ticks=range(len(params)), labels=params, test=accuracies_test, path='nn_ga_accuracy.png')
     plot(params, auc_train, 'Pop Size & Mutation Prob vs AUC', 'Pop Size & Mutation Prob', 'AUC', ticks=range(len(params)), labels=params, test=auc_test, path='nn_ga_auc.png')
+    print('times for params: ', list(zip(params, times)))
+    print('total time: ', sum(times))
     print('best classification: ')
     print(classification_report(test_y, pred))
 
