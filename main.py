@@ -27,6 +27,9 @@ def hill_climb(fit, id=None):
     elif id == 'k':
         name = 'knap'
         problem = ml.DiscreteOpt(length=100, fitness_fn=fit, max_val=2)
+    elif id == 'p':
+        name = 'peaks'
+        problem = ml.DiscreteOpt(length=128, fitness_fn=fit)
     else:
         name = 'queens'
         problem = ml.DiscreteOpt(length=32, fitness_fn=fit, max_val=32)
@@ -47,6 +50,8 @@ def hill_climb(fit, id=None):
     means = [np.mean(i) for i in curves]
     index = np.argmax(means)
     best_curve = curves[index]
+    print('times at each restart: ', list(zip(times, restarts)))
+    print('total time: ', sum(times))
     print('max fitness is ', fitnesses.max())
     print('max fitness params ', restarts[np.argmax(fitnesses)])
     print('mean of best curve ', means[index])
@@ -63,6 +68,9 @@ def annealing(fit, id=None):
     elif id == 'k':
         name = 'knap'
         problem = ml.DiscreteOpt(length=100, fitness_fn=fit, max_val=2)
+    elif id == 'p':
+        name = 'peaks'
+        problem = ml.DiscreteOpt(length=128, fitness_fn=fit)
     else:
         name = 'queens'
         problem = ml.DiscreteOpt(length=32, fitness_fn=fit, max_val=32)
@@ -83,6 +91,9 @@ def annealing(fit, id=None):
     means_e = [np.mean(i) for i in curves_e]
     index = np.argmax(means_e)
     best_curve = curves_e[index]
+    print('exponential --------------')
+    print('times at each temp: ', list(zip(times_e, temps)))
+    print('total time: ', sum(times_e))
     print('max fitness is ', fitnesses_e.max())
     print('max fitness params ', temps[np.argmax(fitnesses_e)])
     print('mean of best curve ', means_e[index])
@@ -108,6 +119,9 @@ def annealing(fit, id=None):
     means_g = [np.mean(i) for i in curves_g]
     index = np.argmax(means_g)
     best_curve = curves_g[index]
+    print('geometric ----------------')
+    print('times at each temp: ', list(zip(times_g, temps)))
+    print('total time: ', sum(times_g))
     print('max fitness is ', fitnesses_g.max())
     print('max fitness params ', temps[np.argmax(fitnesses_g)])
     print('mean of best curve ', means_g[index])
@@ -125,6 +139,9 @@ def genetic(fit, id=None):
     elif id == 'k':
         name = 'knap'
         problem = ml.DiscreteOpt(length=100, fitness_fn=fit, max_val=2)
+    elif id == 'p':
+        name = 'peaks'
+        problem = ml.DiscreteOpt(length=128, fitness_fn=fit)
     else:
         name = 'queens'
         problem = ml.DiscreteOpt(length=32, fitness_fn=fit, max_val=32)
@@ -146,6 +163,8 @@ def genetic(fit, id=None):
     means = [np.mean(i) for i in curves]
     index = np.argmax(means)
     best_curve = curves[index]
+    print('times at each param: ', list(zip(times, params)))
+    print('total time: ', sum(times))
     print('max fitness is ', fitnesses.max())
     print('max fitness params ', params[np.argmax(fitnesses)])
     print('mean of best curve ', means[index])
@@ -156,13 +175,16 @@ def genetic(fit, id=None):
 
 def mimic(fit, id=None):
     pop_size = [100, 200, 500]
-    keep_pct = [.05, .1, .5]
+    keep_pct = [.1, .5]
     if id == 'f':
         name = 'flipflop'
         problem = ml.DiscreteOpt(length=300, fitness_fn=fit)
     elif id == 'k':
         name = 'knap'
         problem = ml.DiscreteOpt(length=100, fitness_fn=fit, max_val=2)
+    elif id == 'p':
+        name = 'peaks'
+        problem = ml.DiscreteOpt(length=128, fitness_fn=fit)
     else:
         name = 'queens'
         problem = ml.DiscreteOpt(length=32, fitness_fn=fit, max_val=32)
@@ -186,6 +208,8 @@ def mimic(fit, id=None):
     means = [np.mean(i) for i in curves]
     index = np.argmax(means)
     best_curve = curves[index]
+    print('times at each param: ', list(zip(times, params)))
+    print('total time: ', sum(times))
     print('max fitness is ', fitnesses.max())
     print('max fitness params ', params[np.argmax(fitnesses)])
     print('mean of best curve ', means[index])
@@ -208,7 +232,7 @@ if __name__ == '__main__':
     x = input('''Choose problem:
                     FlipFlop: f,
                     Knapsack: k,
-                    Queens: q: ''')
+                    Four Peaks: p: ''')
     y = input('''Choose algorithm:
                     Hill climb: R,
                     Annealing: A,
@@ -238,6 +262,16 @@ if __name__ == '__main__':
             mimic(fit, id=x)
     elif x == 'q':
         fit = ml.CustomFitness(max_queens)
+        if y == 'R':
+            hill_climb(fit, id=x)
+        elif y == 'A':
+            annealing(fit, id=x)
+        elif y == 'G':
+            genetic(fit, id=x)
+        elif y == 'M':
+            mimic(fit, id=x)
+    elif x == 'p':
+        fit = ml.FourPeaks()
         if y == 'R':
             hill_climb(fit, id=x)
         elif y == 'A':

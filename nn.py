@@ -3,10 +3,11 @@ import pandas as pd
 import mlrose_hiive as ml
 import matplotlib.pyplot as plt
 import time
-from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold
-from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, classification_report
+from sklearn.model_selection import StratifiedShuffleSplit, StratifiedKFold, learning_curve
+from sklearn.metrics import roc_auc_score, accuracy_score, f1_score, classification_report, roc_curve
 
 SEED = 903454028
+N_JOBS = 16
 np.random.seed(SEED)
 
 def plot(x, y, title, xlabel, ylabel, ticks=None, labels=None, test=None, nested=False, path=None):
@@ -30,87 +31,71 @@ def plot(x, y, title, xlabel, ylabel, ticks=None, labels=None, test=None, nested
     plt.savefig(base + path)
     plt.clf()
 
-def split_arr(arr, n):
-    return [arr[i:i+n] for i in range(0, len(arr), n)]
-
 def nn_rhc(train_x, train_y, test_x, test_y):
-    restarts = [10, 25, 50, 100]
+    restarts = [10, 25, 50]
     # learning_rates = [.001, .01, .1, .5]
-    curves = []
-    loss = []
-    accuracies_train = []
-    auc_train = []
-    accuracies_test = []
-    auc_test = []
-    pred = None
+    best_restart = 0
+    best_auc = 0
     times = []
-    # params = []
     for ind, i in enumerate(restarts):
-        # set_accuracy = []
-        # set_auc = []
-        # set_loss = []
         start = time.time()
         print(ind/len(restarts), ' progress')
-        # for ind, j in enumerate(learning_rates):
-            # print(j)
         model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='random_hill_climb', max_iters=1000, bias=True, is_classifier=True,
                         learning_rate=0.1, early_stopping=False, restarts=i, max_attempts=100, random_state=SEED, curve=True)
         model.fit(train_x, train_y)
-        loss.append(model.loss)
-        curves.append(model.fitness_curve)
-        # params.append('restart={}, lr={}'.format(i, j))
-        # train
-        train_y_pred = model.predict(train_x)
-        accuracies_train.append(accuracy_score(train_y, train_y_pred))
-        auc_train.append(roc_auc_score(train_y, train_y_pred))
-
         # test
         pred_y = model.predict(test_x)
-        accuracies_test.append(accuracy_score(test_y, pred_y))
         auc = roc_auc_score(test_y, pred_y)
-        auc_test.append(auc)
-        if max(auc_test) == auc:
-            pred = pred_y
         times.append(time.time() - start)
-        # loss.append(set_loss)
-        # accuracies_test.append(set_accuracy)
-        # auc_test.append(set_auc)
+        if auc > best_auc:
+            best_restart = i
+        print(auc, ' ', i)
 
-    # accuracies_test = np.asarray(accuracies_test)
-    # auc_test = np.asarray(auc_test)
-    # print(auc_test)
-    # index = np.argmax(auc_test.mean(axis=1))
-    # print(learning_rates[index])
-    # accuracies_test = accuracies_test[index]
-    # auc_test = auc_test[index]
-
-    curves = np.asarray(curves)
-    index = np.argmax(curves.mean(axis=1))
-    best_curve = curves[index]
-    plot(restarts, loss, 'Loss vs Restarts', 'Restarts', 'Loss', path='nn_rhc_loss.png')
-    plot(restarts, accuracies_train, 'Accuracy vs Restarts', 'Restarts', 'Accuracy', test=accuracies_test, path='nn_rhc_accuracy.png')
-    plot(restarts, auc_train, 'AUC vs Restarts', 'Restarts', 'AUC Score', test=auc_test, path='nn_rhc_auc.png')
-    # plot(params, loss, 'Loss vs Restarts', 'Restarts', 'Loss', ticks=range(len(params)), labels=params)
-    # plot(params, accuracies_train, 'Accuracy vs Restarts', 'Restarts', 'Accuracy', ticks=range(len(params)), labels=params, test=accuracies_test)
-    # plot(params, auc_train, 'AUC vs Restarts', 'Restarts', 'AUC Score', ticks=range(len(params)), labels=params, test=auc_test)
-    plot(range(len(best_curve)), best_curve, 'Best Curve - NN RHC', 'Iterations', 'Fitness', path='nn_rhc_best_curve.png')
     print('times for reach restart: ', list(zip(restarts, times)))
     print('total time for all: ', sum(times))
-    print('best clasification: ')
-    print(classification_report(test_y, pred))
+    # Learning Curve
+    print('starting plots')
+    model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='random_hill_climb', max_iters=1000, bias=True, is_classifier=True,
+                     learning_rate=0.1, early_stopping=False, restarts=best_restart, max_attempts=100, random_state=SEED)
+    train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(model, train_x, train_y, n_jobs=N_JOBS,
+                       train_sizes=np.linspace(0.1, 1.0, 5), scoring='f1_weighted', verbose=5, random_state=SEED, return_times=True)
+    plt.title('RHC Learning')
+    plt.xlabel('Training Examples')
+    plt.ylabel('Score')
+    plt.grid()
+    train_scores_mean = np.mean(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    fit_times_mean = np.mean(fit_times, axis=1)
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+                 label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+                 label="Cross-validation score")
+    plt.legend(loc="best")
+    plt.savefig('figures/nn_rhc_learning.png')
+    plt.clf()
 
+    # ROC Curve
+    model.fit(train_x, train_y)
+    pred_y = model.predict(test_x)
+    y_probs = model.predicted_probs
+    fpr, tpr, _ = roc_curve(test_y, y_probs)
+    auc = roc_auc_score(test_y, pred_y)
+    plt.plot(fpr, tpr, label='ROC Curve, area={}'.format(auc))
+    plt.legend(loc='lower right')
+    plt.savefig('figures/nn_rhc_roc.png')
+    plt.clf()
+
+    print('best clasification: ')
+    print(classification_report(test_y, pred_y))
 
 def nn_sa(train_x, train_y, test_x, test_y):
     temps = [.01, 0.5, 10, 50]
     learning_rates = [.001, .01, .1, .5]
-    curves = []
-    loss = []
-    accuracies_train = []
-    auc_train = []
-    accuracies_test = []
-    auc_test = []
-    pred = None
     times = []
+    params = []
+    best_temp = 0
+    best_lr = 0
+    best_auc = 0
     for ind, i in enumerate(temps):
         print(ind/len(temps), ' progress')
         for j in learning_rates:
@@ -119,62 +104,62 @@ def nn_sa(train_x, train_y, test_x, test_y):
             model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='simulated_annealing', max_iters=1000, bias=True, is_classifier=True,
                             learning_rate=j, early_stopping=False, schedule=schedule, max_attempts=100, random_state=SEED, curve=True)
             model.fit(train_x, train_y)
-            loss.append(model.loss)
-            curves.append(model.fitness_curve)
-            # train
-            train_y_pred = model.predict(train_x)
-            accuracies_train.append(accuracy_score(train_y, train_y_pred))
-            auc_train.append(roc_auc_score(train_y, train_y_pred))
-
             # test
             pred_y = model.predict(test_x)
-            accuracies_test.append(accuracy_score(test_y, pred_y))
             auc = roc_auc_score(test_y, pred_y)
-            auc_test.append(auc)
-            if max(auc_test) == auc:
-                pred = pred_y
+            print(auc, ' ', i, ' ', j)
             times.append(time.time() - start)
+            if auc > best_auc:
+                best_temp = i
+                best_lr = j
+            params.append('temp={}, lr={}'.format(i, j))
 
-    accuracies_test = np.asarray(split_arr(accuracies_test, 4))
-    auc_test = np.asarray(split_arr(auc_test, 4))
-    accuracies_train = np.asarray(split_arr(accuracies_train, 4))
-    auc_train = np.asarray(split_arr(auc_train, 4))
-    index = np.argmax(auc_test.mean(axis=1))
-    best_ind = np.argmax(auc_test)
-    print('best lr: ', learning_rates[index])
-    accuracies_test = accuracies_test[index]
-    auc_test = auc_test[index]
-    accuracies_train = accuracies_train[index]
-    auc_train = auc_train[index]
-    # curves = np.array(split_arr(curves, 4))
-    # index = np.argmax(curves.mean(axis=1))
-    # best_curve = curves[index]
-    loss = np.asarray(split_arr(loss, 4))
-    index = np.argmin(loss.mean(axis=1))
-    loss = loss[index]
+    print('times for params: ', list(zip(params, times)))
+    print('total time: ', sum(times))
+    # Learning Curve
+    print('starting plots')
+    schedule = ml.ExpDecay(init_temp=best_temp)
+    model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='simulated_annealing', max_iters=1000, bias=True, is_classifier=True,
+                            learning_rate=best_lr, early_stopping=False, schedule=schedule, max_attempts=100, random_state=SEED, curve=True)
+    train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(model, train_x, train_y, n_jobs=N_JOBS,
+                       train_sizes=np.linspace(0.1, 1.0, 5), scoring='f1_weighted', verbose=5, random_state=SEED, return_times=True)
+    plt.title('SA Learning')
+    plt.xlabel('Training Examples')
+    plt.ylabel('Score')
+    plt.grid()
+    train_scores_mean = np.mean(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    fit_times_mean = np.mean(fit_times, axis=1)
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+                 label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+                 label="Cross-validation score")
+    plt.legend(loc="best")
+    plt.savefig('figures/nn_sa_learning.png')
+    plt.clf()
 
+    # ROC Curve
+    model.fit(train_x, train_y)
+    pred_y = model.predict(test_x)
+    y_probs = model.predicted_probs
+    fpr, tpr, _ = roc_curve(test_y, y_probs)
+    auc = roc_auc_score(test_y, pred_y)
+    plt.plot(fpr, tpr, label='ROC Curve, area={}'.format(auc))
+    plt.legend(loc='lower right')
+    plt.savefig('figures/nn_sa_roc.png')
+    plt.clf()
 
-    plot(temps, loss, 'Loss vs Temps', 'Temps', 'Loss', path='nn_sa_loss.png')
-    plot(temps, accuracies_train, 'Accuracy vs temps', 'Temps', 'Accuracy', test=accuracies_test, path='nn_sa_accuracy.png')
-    plot(temps, auc_train, 'AUC vs Temps', 'Temps', 'AUC Score', test=auc_test, path='nn_sa_auc.png')
-    # plot(range(len(best_curve)), best_curve, 'Best Curve - NN RHC', 'Iterations', 'Fitness', path='nn_sa_best_curve.png')
-    print('time for best learning rate: ', list(zip(temps, times[0:4])))
-    print('total experiment time: ', sum(times))
     print('best classification: ')
-    print(classification_report(test_y, pred))
+    print(classification_report(test_y, pred_y))
 
 def nn_ga(train_x, train_y, test_x, test_y):
     pop_size = [10, 50, 100]
     mutation_prob = [.01, .1, .5]
     # learning_rates = [.01, .1, .5]
-    curves = []
-    loss = []
-    accuracies_train = []
-    auc_train = []
-    accuracies_test = []
-    auc_test = []
+    best_auc = 0
+    best_pop = 0
+    best_mut = 0
     params = []
-    pred = None
     times = []
     for ind, i in enumerate(pop_size):
         print(ind/len(pop_size), ' progress')
@@ -183,37 +168,54 @@ def nn_ga(train_x, train_y, test_x, test_y):
             model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='genetic_alg', max_iters=1000, bias=True, is_classifier=True,
                             learning_rate=0.1, early_stopping=False, pop_size=i, mutation_prob=j, max_attempts=100, random_state=SEED, curve=True)
             model.fit(train_x, train_y)
-            loss.append(model.loss)
-            curves.append(model.fitness_curve)
-            params.append('pop_size={}, mutation={}'.format(i, j))
-            # train
-            train_y_pred = model.predict(train_x)
-            accuracies_train.append(accuracy_score(train_y, train_y_pred))
-            auc_train.append(roc_auc_score(train_y, train_y_pred))
-
             # test
             pred_y = model.predict(test_x)
-            accuracies_test.append(accuracy_score(test_y, pred_y))
             auc = roc_auc_score(test_y, pred_y)
-            auc_test.append(auc)
-            if max(auc_test) == auc:
-                pred = pred_y
             times.append(time.time() - start)
+            print(auc, ' ', i, ' ', j)
+            if auc > best_auc:
+                best_pop = i
+                best_mut = j
+            params.append('pop={}, mut={}'.format(i, j))
 
-    curves = np.array(curves)
-    index = np.argmax(curves.mean(axis=1))
-    best_curve = curves[index]
-    best_ind = np.argmax(auc_test)
-    print(auc_test[best_ind])
-    print(params[best_ind])
-    plot(range(len(best_curve)), best_curve, 'Best Curve - NN GA', 'Iterations', 'Fitness', path='nn_ga_best_curve.png')
-    plot(params, loss, 'Pop Size & Mutation Prob vs Loss', 'Pop Size & Mutation Prob', 'Loss', ticks=range(len(params)), labels=params, path='nn_ga_loss.png')
-    plot(params, accuracies_train, 'Pop Size & Mutation Prob vs Accuracy', 'Pop Size & Mutation Prob', 'Accuracy', ticks=range(len(params)), labels=params, test=accuracies_test, path='nn_ga_accuracy.png')
-    plot(params, auc_train, 'Pop Size & Mutation Prob vs AUC', 'Pop Size & Mutation Prob', 'AUC', ticks=range(len(params)), labels=params, test=auc_test, path='nn_ga_auc.png')
     print('times for params: ', list(zip(params, times)))
     print('total time: ', sum(times))
+
+
+    #Learning Curve
+    print('starting plots')
+    model = ml.NeuralNetwork(hidden_nodes=[30, 30], activation='relu', algorithm='genetic_alg', max_iters=1000, bias=True, is_classifier=True,
+                            learning_rate=0.1, early_stopping=False, pop_size=best_pop, mutation_prob=best_mut, max_attempts=100, random_state=SEED, curve=True)
+    train_sizes, train_scores, test_scores, fit_times, _ = learning_curve(model, train_x, train_y, n_jobs=N_JOBS,
+                       train_sizes=np.linspace(0.1, 1.0, 5), scoring='f1_weighted', verbose=5, random_state=SEED, return_times=True)
+    plt.title('GA Learning')
+    plt.xlabel('Training Examples')
+    plt.ylabel('Score')
+    plt.grid()
+    train_scores_mean = np.mean(train_scores, axis=1)
+    test_scores_mean = np.mean(test_scores, axis=1)
+    fit_times_mean = np.mean(fit_times, axis=1)
+    plt.plot(train_sizes, train_scores_mean, 'o-', color="r",
+                 label="Training score")
+    plt.plot(train_sizes, test_scores_mean, 'o-', color="g",
+                 label="Cross-validation score")
+    plt.legend(loc="best")
+    plt.savefig('figures/nn_ga_learning.png')
+    plt.clf()
+
+    # ROC Curve
+    model.fit(train_x, train_y)
+    pred_y = model.predict(test_x)
+    y_probs = model.predicted_probs
+    fpr, tpr, _ = roc_curve(test_y, y_probs)
+    auc = roc_auc_score(test_y, pred_y)
+    plt.plot(fpr, tpr, label='ROC Curve, area={}'.format(auc))
+    plt.legend(loc='lower right')
+    plt.savefig('figures/nn_ga_roc.png')
+    plt.clf()
+
     print('best classification: ')
-    print(classification_report(test_y, pred))
+    print(classification_report(test_y, pred_y))
 
 if __name__ == '__main__':
     d = pd.read_csv('gamma/gamma.csv')
@@ -238,3 +240,5 @@ if __name__ == '__main__':
         nn_ga(X_train, y_train, X_test, y_test)
     elif x == 'a':
         nn_sa(X_train, y_train, X_test, y_test)
+    elif x == 'n':
+        nn_gd(X_train, y_train, X_test, y_test)
